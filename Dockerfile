@@ -1,26 +1,23 @@
-# Use the official Node.js image as the base image
-FROM node:latest
+FROM node:alpine AS build
 
-# Instalar o Angular CLI globalmente
-RUN npm install -g @angular/cli@16.2.7
-
-# Definir o diretório de trabalho para /app
-WORKDIR /app
-
-# Copiar o package.json e package-lock.json para o contêiner
-COPY package*.json ./
-
-# Instalar as dependências
+COPY package.json /usr/
+WORKDIR /usr
 RUN npm install
 
-# Copiar o código-fonte para o contêiner
-COPY . .
+COPY ./ /usr
+RUN npm run build
 
-# Build do aplicativo
-RUN ng build --configuration=production
+FROM nginx:alpine
 
-# Expor a porta 4200
-EXPOSE 4200
+## Remove default Nginx website
+RUN rm -rf /usr/share/nginx/html/*
 
-# Iniciar o aplicativo
-CMD ["ng", "serve", "--host", "0.0.0.0", "--port", "4200"]
+COPY ./nginx.config /etc/nginx/nginx.conf
+
+COPY --from=build  /usr/dist/my-user-web-app /usr/share/nginx/html
+
+RUN echo "mainFileName=\"\$(ls /usr/share/nginx/html/main*.js)\" && \
+          envsubst '\$URL_IMAGEM ' < \${mainFileName} > main.tmp && \
+          mv main.tmp  \${mainFileName} && nginx -g 'daemon off;'" > run.sh
+
+ENTRYPOINT ["sh", "run.sh"]
